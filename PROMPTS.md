@@ -10,6 +10,9 @@ Response: it gave wrote the schema.sql with all the specified requirements and a
 Prompt 4: Asked it to check few of my requirements for example check if the person who is not granted access can be access the documents or not
 Response: It gave me that it has done all the required and mentioned things and all checks are green
 
+Prompt 5: M4 the authorization core (authz-policy.ts pure decide(), authz.ts requireDocAccess gate, GET /api/documents/[id], run the gate on the deployed site, add THREATS.md)
+Response: The three files already existed and were correct on the classic-mistake list - uniform 404 not 403, one shared gate not route-only checks, edit implies read, revoked grants filtered twice, response built field by field (no ...doc spread), and no admin rule (D6). So nothing to log there: reviewed, not caught. What the gate DID catch: (1) the seeded demo users had placeholder clerk_ids (`seed:<email>`) matching no real Clerk account, so a browser sign-in would have lazy-synced a DUPLICATE users row and Ravi would not have owned his own test document - fixed by linking the real Clerk ids. (2) Vercel's SUPABASE_SERVICE_ROLE_KEY was stale while local .env.local worked, so every authenticated request in production 500'd with "Invalid API key" - replaced the env var and redeployed. Result: gate 27/27 against production, verify_audit_chain() null.
+
 prompt 5:give the code required and suitable for my requirement and I will mention the requirement." I wrote this one and mentioned my requirements which are
 
 Step 1: The server-only database client
