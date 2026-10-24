@@ -9,3 +9,35 @@ Response: it gave wrote the schema.sql with all the specified requirements and a
 
 Prompt 4: Asked it to check few of my requirements for example check if the person who is not granted access can be access the documents or not
 Response: It gave me that it has done all the required and mentioned things and all checks are green
+
+prompt 5:give the code required and suitable for my requirement and I will mention the requirement." I wrote this one and mentioned my requirements which are
+
+Step 1: The server-only database client
+Step 2: getCurrentUser(), the core function
+
+Design it as a pipeline, where each stage can stop the request:
+
+Ask Clerk who is signed in (the server-side auth() helper, which is async in recent Clerk versions, so check the docs). No session means return null.
+Look up the row in users by clerk_id.
+If it doesn’t exist, create it. This is “lazy sync”: the row appears on a person’s first request, so you don’t need a webhook.
+If active = false, treat the person as not allowed in, even though Clerk says they’re signed in.
+Return a small object: id, email, name, role. Don’t return the entire row.
+Step 3: Two guard helpers
+ requireUser(): returns the user, or throws or returns a 401 for APIs.
+ requireAdmin(): calls requireUser(), then checks role === 'admin', otherwise a 403 (you’ll log the denial in M7).
+Step 4: Protect /api properly
+ Check your Clerk middleware. Confirm what a signed-out API call returns (curl it). Page requests redirect to sign-in, but API calls should return a 401-style JSON response, not an HTML redirect.
+ Remember: middleware is only the first gate. The route still calls requireUser().
+
+ Step 5: Throwaway /api/me
+ Return { id, email, role } using requireUser().
+ You’ll delete or keep this later, so mark it with a comment.
+Step 6: The three demo accounts
+
+response: It gave me around 6 files and I replaced the code in it and committed the last change, last commit before this
+supabase-admin.ts	src/lib/supabase-admin.ts
+http.ts	src/lib/http.ts
+request-meta.ts	src/lib/request-meta.ts
+audit.ts	src/lib/audit.ts
+auth.ts	src/lib/auth.ts
+route.ts	src/app/api/me/route.ts
