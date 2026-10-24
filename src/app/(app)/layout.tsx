@@ -4,6 +4,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { HttpError } from "@/lib/http";
 import Nav from "@/components/Nav";
 
+// Every page here renders for ONE signed-in person and re-checks their active
+// flag on every request, so they can never be prerendered: the shell depends on
+// a live session and a live row. Declaring that here (it applies to all child
+// routes) also keeps Next's dev prerender from flagging the uncached Supabase
+// call in getCurrentUser() as a blocking route.
+export const dynamic = "force-dynamic";
+
 // Everything under (app) needs a signed-in, ACTIVE user. This is a convenience
 // for the page shell only: the API routes make the real decisions every time.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
