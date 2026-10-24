@@ -32,3 +32,37 @@ export function handleError(err: unknown) {
   console.error("Unhandled error:", err);
   return json({ error: "internal_error" }, 500);
 }
+
+/**
+ * CSRF defence in depth for state-changing routes (POST/PUT/PATCH/DELETE).
+ * Browsers always send an Origin header on cross-site writes. If it is present
+ * and does not match our own host, refuse. (Session cookies are already
+ * SameSite=Lax; this is a second, independent lock.)
+ * A request with no Origin (curl, server-to-server) passes: it cannot ride a
+ * victim's browser session.
+ */
+export function assertSameOrigin(req: Request): void {
+  const origin = req.headers.get("origin");
+  if (!origin) return;
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    throw new HttpError(403, "bad_origin");
+  }
+  if (originHost !== host) throw new HttpError(403, "bad_origin");
+}
+
+/** Reads a small JSON body safely: size-capped, parse errors become 400. */
+export async function readJson(req: Request, maxBytes = 10_000): Promise<unknown> {
+  const declared = Number(req.headers.get("content-length") ?? "0");
+  if (declared > maxBytes) throw new HttpError(413, "body_too_large");
+  const text = await req.text();
+  if (text.length > maxBytes) throw new HttpError(413, "body_too_large");
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(400, "invalid_json");
+  }
+}
