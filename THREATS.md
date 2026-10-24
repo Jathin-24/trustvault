@@ -29,3 +29,14 @@ Resource abuse → 4 MB cap, but no per-user quota and no rate limit. Accepted.
 Old file versions stay in storage with no UI to restore them. Accepted.
 Search and list are not audited (only the single-document view is). Accepted to avoid noise.
 The access rule exists twice, in the TypeScript policy and in the SQL search function, and they could drift apart. Accepted, and a reason to cover both in M11 tests.
+
+threats identified and resolved when designing the permission sharing process.
+
+Privilege escalation by sharing (an edit-holder re-shares or grants themselves more) → owner only, enforced twice, in the policy and inside the SQL function. Closed.
+Duplicate or racing grants leaving stale access → partial unique index, advisory lock, one atomic function. Closed, tested with 25 parallel identical grants producing one active row.
+IDOR across documents (revoking or reading another document's grants) → the grant must belong to the document in the URL. Closed.
+Account enumeration → closed for strangers, the route authorizes before looking the email up. Accepted for owners: user_not_found tells an owner whether an email has an account, and with no rate limit it could be scripted.
+Wrong person getting access via email pattern matching → exact lowercase equality plus a DB constraint, ILIKE deliberately avoided so "_" in an address can't act as a wildcard. Closed.
+Granting to people who haven't signed up yet is not supported. Accepted, and it avoids pre-created grants that a different person could claim by registering first.
+Disabled or deleted users keep old grant rows (history). They can't use them, since getCurrentUser blocks inactive accounts first. Accepted.
+The audit row for a grant is written before the change and records the requested email and level, not the final permission id. The table's history columns hold the outcome. Accepted.
