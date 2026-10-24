@@ -1,21 +1,3 @@
-// import type { NextConfig } from "next";
-
-// const nextConfig: NextConfig = {
-//   /* config options here */
-//   cacheComponents: true,
-//   partialPrefetching: true,
-//   turbopack: {
-//     rules: {
-//       "*.css": {
-//         loaders: ["@tailwindcss/turbopack"],
-//         as: "*.css",
-//       },
-//     },
-//   },
-// };
-
-// export default nextConfig;
-
 import type { NextConfig } from "next";
 
 const securityHeaders = [
@@ -27,6 +9,13 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Every page in this app is auth-gated and re-checks a live session + the
+  // user's `active` flag on every request, so nothing is static. Turning
+  // cacheComponents OFF (it is what caused the "Blocking Route" / "dynamic is
+  // not compatible" build fights) makes that explicit: the (app) routes are
+  // marked force-dynamic instead, which is the correct model for per-request
+  // auth.
+  cacheComponents: false,
   poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
