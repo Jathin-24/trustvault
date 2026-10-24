@@ -1,3 +1,5 @@
+Numbered register (T-01 to T-79) with statuses and evidence: THREATS-NUMBERED.md. This file is the prose version.
+
 threats identified and resolved when designing the authentication process.
 
 Disabled user with a valid session → active checked on every request. Closed.
@@ -58,3 +60,17 @@ Clickjacking (framing the app to trick a click) → X-Frame-Options: DENY on eve
 No Content-Security-Policy → Accepted; Clerk needs several script and connect origins and a CSP could not be tested against the keys in the time available. It is the next hardening step.
 The UI shows controls from the access the server last reported, which can go stale (a revoked editor still sees the Edit card until reload) → Accepted; the UI is advisory only and every action is re-checked by the API, which refuses regardless of what the button showed.
 Admin screens display personal data (emails, IPs) → Accepted; admin-only, and every read is itself audited.
+
+threats found by attacking the deployed system ourselves (M9: two automated runners fired at production with three real identities — an attack runner (134 probes, 3 runs) and a checklist runner (140 probes, 5 runs), plus a standalone psql tamper run; every tier re-run after each fix).
+
+A date filter accepted impossible days (from=2026-02-30 silently behaved as from March 2, because JavaScript rolls invalid days over instead of failing) → both date-filtering routes now round-trip the parsed day against the input string and refuse anything that is not a real calendar day with 400 invalid_query. Closed.
+Learning whether a denied document exists → a real-but-denied id, a well-formed nonexistent id and a malformed id all return the identical 404 body, and measured response-time medians over the same code path are indistinguishable. Closed.
+Using the grant route to discover which email addresses have accounts → authorization runs before the email lookup, so a denied grant and a grant on a nonexistent document answer identically. Closed.
+A cross-site page writing with the victim's session (CSRF) → Origin is checked before authorization on every state-changing route: an evil origin gets 403 bad_origin, and no CORS header is ever granted to it. Closed.
+Storage keys or contents leaking from any endpoint → every list, detail, permission, admin and flag response was grepped across 9 routes; storage_key never appears. Closed.
+Rejected uploads leaving orphan rows or files → refusals create no document row and no storage object (counts checked before and after each rejection batch); a polyglot file (a genuine PDF header with an executable appended) is accepted because its magic bytes are a real PDF, but it is always served as an attachment with nosniff and a sandboxed CSP, never inline. Accepted (upload) / Closed (serving).
+An unauthenticated flood → every request is 401, leaves no audit row, and changes no state; no rate limit remains Accepted (see the admin block). 
+A storage file swapped behind the app (service key) → the download refuses with integrity_error and logs integrity_failure, and the failure direction is safe: the app never serves wrong bytes. It cannot recover instantly, though: the storage GET path keeps serving its stale CDN variant (Cache-Control max-age=3600) after an out-of-band overwrite, so even re-uploading the original bytes may keep the download refusing for up to an hour. The app can never hit this itself (putObject uses upsert:false and content-PUT mints a new storage key per version). Accepted, environment-limited (THREATS-NUMBERED T-39).
+Temporary dev-check routes (/dev-check/me, /dev-check/supabase-smoke, both self-labeled TEMPORARY) and their dead lib/supabase/server.ts helper were live in production, unguarded → found by the Part 1 audit (C-05) and removed in fix(security) commit 841f96a; the deployed site now returns 404 on them. Closed.
+The unverified-email gate could not be staged live: this Clerk instance marks backend-created emails as verified (strategy "admin") and its add/delete-email endpoints 404, so no unverified state exists to test against. The rejection path (403 email_not_verified) is code-verified only. Partial, environment-limited (THREATS-NUMBERED T-03).
+A %00 id is rejected by the platform edge (plain-text 400) before any handler runs, so unlike every other malformed id it is neither a uniform 404 nor audit-logged. Never 200 or 500 either way. Partial/Accepted: the audit trail covers the app, not the edge (THREATS-NUMBERED T-15, T-53).
