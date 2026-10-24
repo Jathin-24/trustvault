@@ -1,7 +1,16 @@
 import { currentUser } from '@clerk/nextjs/server'
+import { Suspense } from 'react'
 
 // TEMPORARY smoke-test page — delete after verifying Clerk server-side session access.
-export default async function MePage() {
+export default function MePage() {
+  return (
+    <Suspense fallback={<p className="p-8">Loading…</p>}>
+      <Me />
+    </Suspense>
+  )
+}
+
+async function Me() {
   const user = await currentUser()
 
   if (!user) {
