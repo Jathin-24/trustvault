@@ -50,3 +50,11 @@ Admin reads leaving no trace → every admin endpoint writes its own audit row, 
 The documents endpoint leaking storage keys or contents → metadata only, storage_key never selected. Closed.
 A compromised admin editing audit history → update/delete/truncate triggers plus verify_audit_chain(), which names the exact tampered row in the demo. Closed.
 Flag heuristics can be gamed and there is no rate limit on admin endpoints → Accepted; flags only read the trail and every access still goes through the policy.
+
+threats identified and resolved when designing the browser interface.
+
+XSS through stored names, categories or audit details → every value renders as text, React escapes it, and no component uses dangerouslySetInnerHTML; a file named like an <img onerror> tag shows as literal text. Closed.
+Clickjacking (framing the app to trick a click) → X-Frame-Options: DENY on every route. Closed.
+No Content-Security-Policy → Accepted; Clerk needs several script and connect origins and a CSP could not be tested against the keys in the time available. It is the next hardening step.
+The UI shows controls from the access the server last reported, which can go stale (a revoked editor still sees the Edit card until reload) → Accepted; the UI is advisory only and every action is re-checked by the API, which refuses regardless of what the button showed.
+Admin screens display personal data (emails, IPs) → Accepted; admin-only, and every read is itself audited.
