@@ -40,3 +40,13 @@ Wrong person getting access via email pattern matching → exact lowercase equal
 Granting to people who haven't signed up yet is not supported. Accepted, and it avoids pre-created grants that a different person could claim by registering first.
 Disabled or deleted users keep old grant rows (history). They can't use them, since getCurrentUser blocks inactive accounts first. Accepted.
 The audit row for a grant is written before the change and records the requested email and level, not the final permission id. The table's history columns hold the outcome. Accepted.
+
+threats identified and resolved when designing the admin oversight process.
+
+A member reaching admin endpoints → requireAdmin checks role and active on the session row, refuses, and writes an admin_access_denied row naming the route. Closed.
+One admin attacking another (demote, deactivate) → can_modify_self refuses every change to the acting admin's own row; there is no delete. Closed.
+Escalation to root or smuggled fields → strictObject accepts only role and is_active, and root is not a settable value. Closed.
+Admin reads leaving no trace → every admin endpoint writes its own audit row, including the refused probes from non-admins. Closed.
+The documents endpoint leaking storage keys or contents → metadata only, storage_key never selected. Closed.
+A compromised admin editing audit history → update/delete/truncate triggers plus verify_audit_chain(), which names the exact tampered row in the demo. Closed.
+Flag heuristics can be gamed and there is no rate limit on admin endpoints → Accepted; flags only read the trail and every access still goes through the policy.
