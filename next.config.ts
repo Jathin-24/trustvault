@@ -17,6 +17,19 @@ const nextConfig: NextConfig = {
   // auth.
   cacheComponents: false,
   poweredByHeader: false,
+  // Tailwind v4 ships as a Turbopack loader, not a PostCSS plugin. Without
+  // this rule the `@import "tailwindcss"` and `@theme` at-rules in
+  // globals.css are never compiled, so every utility class silently produces
+  // no CSS and the app renders unstyled. (@tailwindcss/turbopack is in
+  // devDependencies; there is no postcss.config on purpose.)
+  turbopack: {
+    rules: {
+      "*.css": {
+        loaders: ["@tailwindcss/turbopack"],
+        as: "*.css",
+      },
+    },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
