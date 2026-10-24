@@ -23,9 +23,17 @@ export async function GET(req: Request) {
     if (!parsed.success) throw new HttpError(400, "invalid_query");
     const p = parsed.data;
 
-    const from = p.from ? new Date(`${p.from}T00:00:00Z`) : null;
-    const to = p.to ? new Date(Date.parse(`${p.to}T00:00:00Z`) + 86_400_000) : null;
-    if ((from && isNaN(+from)) || (to && isNaN(+to))) throw new HttpError(400, "invalid_query");
+    // See documents/route.ts: JS rolls impossible days ("2026-02-30") over to
+    // the next month, so each date is round-tripped and refused unless it is a
+    // real calendar day. (Found by the M9 attack run.)
+    const parseDay = (s: string) => {
+      const d = new Date(`${s}T00:00:00Z`);
+      return isNaN(+d) || d.toISOString().slice(0, 10) !== s ? null : d;
+    };
+    const from = p.from ? parseDay(p.from) : null;
+    const to = p.to ? parseDay(p.to) : null;
+    if ((p.from && !from) || (p.to && !to)) throw new HttpError(400, "invalid_query");
+    const toEnd = to ? new Date(+to + 86_400_000) : null; // inclusive day
 
     await auditAdminRead(admin, "admin_view_audit", { filters: parsed.data });
 
@@ -39,7 +47,7 @@ export async function GET(req: Request) {
     if (p.action) q = q.eq("action", p.action);
     if (p.outcome) q = q.eq("outcome", p.outcome);
     if (from) q = q.gte("created_at", from.toISOString());
-    if (to) q = q.lt("created_at", to.toISOString());
+    if (toEnd) q = q.lt("created_at", toEnd.toISOString());
 
     const { data, error, count } = await q;
     if (error) throw error;

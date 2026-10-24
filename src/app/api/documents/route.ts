@@ -39,9 +39,17 @@ export async function GET(req: Request) {
     if (!parsed.success) throw new HttpError(400, "invalid_query");
     const p = parsed.data;
 
-    const fromIso = p.from ? new Date(`${p.from}T00:00:00Z`) : null;
-    const toIso = p.to ? new Date(Date.parse(`${p.to}T00:00:00Z`) + 86_400_000) : null; // inclusive day
-    if ((fromIso && isNaN(+fromIso)) || (toIso && isNaN(+toIso))) throw new HttpError(400, "invalid_query");
+    // A filter date must be a REAL calendar day. JS rolls "2026-02-30" over to
+    // March 2 instead of failing (found by the M9 attack run), so the parsed
+    // date is round-tripped against the input; impossible dates are a 400.
+    const parseDay = (s: string) => {
+      const d = new Date(`${s}T00:00:00Z`);
+      return isNaN(+d) || d.toISOString().slice(0, 10) !== s ? null : d;
+    };
+    const fromIso = p.from ? parseDay(p.from) : null;
+    const toIso = p.to ? parseDay(p.to) : null;
+    if ((p.from && !fromIso) || (p.to && !toIso)) throw new HttpError(400, "invalid_query");
+    const toEndIso = toIso ? new Date(+toIso + 86_400_000) : null; // inclusive day
 
     const { data, error } = await supabaseAdmin.rpc("search_documents", {
       p_user_id: user.id,
@@ -49,7 +57,7 @@ export async function GET(req: Request) {
       p_owner: p.owner ?? null,
       p_category: p.category ?? null,
       p_from: fromIso ? fromIso.toISOString() : null,
-      p_to: toIso ? toIso.toISOString() : null,
+      p_to: toEndIso ? toEndIso.toISOString() : null,
       p_limit: p.pageSize,
       p_offset: (p.page - 1) * p.pageSize,
     });
