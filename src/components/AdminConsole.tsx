@@ -185,7 +185,7 @@ function UsersTab() {
   const { data, error, loading, reload } = useApi<{ items: UserRow[] }>("/api/admin/users");
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  async function change(u: UserRow, patch: { role?: "admin" | "member"; active?: boolean; uploadEnabled?: boolean }, question: string) {
+  async function change(u: UserRow, patch: { role?: "admin" | "member"; active?: boolean; uploadEnabled?: boolean; }, question: string) {
     if (!confirm(question)) return;
     setMsg(null);
     try {

@@ -7,8 +7,12 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 type Ctx = { params: Promise<{ userId: string }> };
 
 const body = z
-  .strictObject({ role: z.enum(["admin", "member"]).optional(), active: z.boolean().optional() })
-  .refine((v) => v.role !== undefined || v.active !== undefined);
+  .strictObject({
+  role: z.enum(["admin", "member"]).optional(),
+  active: z.boolean().optional(),
+  uploadEnabled: z.boolean().optional(),
+})
+  .refine((v) => v.role !== undefined || v.active !== undefined || v.uploadEnabled !== undefined);
 
 // PATCH /api/admin/users/:userId  { role?, active? }   ADMIN ONLY
 // Deactivating takes effect on that person's very next request (getCurrentUser
