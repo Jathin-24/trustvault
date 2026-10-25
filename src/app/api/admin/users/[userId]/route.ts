@@ -23,16 +23,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
     if (!parsed.success || !z.string().uuid().safeParse(userId).success) throw new HttpError(400, "invalid_request");
     if (userId === admin.id) throw new HttpError(400, "cannot_modify_self");
 
-    const found = await supabaseAdmin.from("users").select("id, email, role, active").eq("id", userId).maybeSingle();
+    const found = await supabaseAdmin.from("users").select("id, email, role, active, upload_enabled").eq("id", userId).maybeSingle();
     if (found.error) throw found.error;
     if (!found.data) throw new HttpError(404, "not_found");
-    const t = found.data as { id: string; email: string; role: string; active: boolean };
+    const t = found.data as { id: string; email: string; role: string; active: boolean; upload_enabled: boolean };
 
     const events: { action: string; from: unknown; to: unknown }[] = [];
     if (parsed.data.role !== undefined && parsed.data.role !== t.role)
       events.push({ action: "role_change", from: t.role, to: parsed.data.role });
     if (parsed.data.active !== undefined && parsed.data.active !== t.active)
       events.push({ action: parsed.data.active ? "user_activate" : "user_deactivate", from: t.active, to: parsed.data.active });
+    if (parsed.data.uploadEnabled !== undefined && parsed.data.uploadEnabled !== t.upload_enabled)
+      events.push({ action: parsed.data.uploadEnabled ? "upload_permission_enable" : "upload_permission_disable", from: t.upload_enabled, to: parsed.data.uploadEnabled });
     if (!events.length) return json({ changed: false });
 
     // Audit FIRST (fails closed): no record, no change.
@@ -50,6 +52,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
       p_target_id: t.id,
       p_role: parsed.data.role ?? null,
       p_active: parsed.data.active ?? null,
+      p_upload_enabled: parsed.data.uploadEnabled ?? null,
     });
     if (error) {
       console.error("admin_update_user refused:", error.message);

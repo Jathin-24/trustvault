@@ -1,57 +1,150 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
-import { auditAdminRead, emailsFor, pageParams, queryObject } from "@/lib/admin";
-import { handleError, HttpError, json } from "@/lib/http";
+import { requireUser, type AppUser } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
+import { assertSameOrigin, handleError, HttpError, json } from "@/lib/http";
+import { readUpload } from "@/lib/files";
+import { putObject, removeObject } from "@/lib/storage";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-const query = z.object({ ...pageParams });
+// ---------------------------------------------------------------- list/search
 
-// GET /api/admin/documents   ADMIN ONLY
-// Metadata about ALL documents. There is deliberately no way for an admin to read
-// or download contents (decision D6): no storage_key, no download route for admins.
+const listQuery = z.object({
+  q: z.string().trim().max(100).optional(),
+  owner: z.string().trim().max(100).optional(),
+  category: z.string().trim().max(50).optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  page: z.coerce.number().int().min(1).max(10000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+type SearchRow = {
+  id: string; name: string; category: string; mime_type: string; size_bytes: number;
+  created_at: string; updated_at: string; owner_id: string; owner_name: string | null;
+  owner_email: string; your_access: "owner" | "read" | "edit"; total_count: number | string;
+};
+
+// GET /api/documents?q=&owner=&category=&from=YYYY-MM-DD&to=YYYY-MM-DD&page=&pageSize=
+// Returns ONLY documents the caller owns or holds an active grant on. The filter
+// is inside the SQL function, so there is no "fetch everything then hide some".
 export async function GET(req: Request) {
   try {
-    const admin = await requireAdmin("admin.documents");
-    const parsed = query.safeParse(queryObject(req.url));
+    const user = await requireUser();
+
+    const raw = Object.fromEntries(
+      [...new URL(req.url).searchParams].filter(([, v]) => v !== "")
+    );
+    const parsed = listQuery.safeParse(raw);
     if (!parsed.success) throw new HttpError(400, "invalid_query");
     const p = parsed.data;
-    await auditAdminRead(admin, "admin_view_documents", { page: p.page });
 
-    const { data, error, count } = await supabaseAdmin
-      .from("documents")
-      .select("id, name, category, mime_type, size_bytes, owner_id, created_at, updated_at, deleted_at", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range((p.page - 1) * p.pageSize, p.page * p.pageSize - 1);
+    // A filter date must be a REAL calendar day. JS rolls "2026-02-30" over to
+    // March 2 instead of failing (found by the M9 attack run), so the parsed
+    // date is round-tripped against the input; impossible dates are a 400.
+    const parseDay = (s: string) => {
+      const d = new Date(`${s}T00:00:00Z`);
+      return isNaN(+d) || d.toISOString().slice(0, 10) !== s ? null : d;
+    };
+    const fromIso = p.from ? parseDay(p.from) : null;
+    const toIso = p.to ? parseDay(p.to) : null;
+    if ((p.from && !fromIso) || (p.to && !toIso)) throw new HttpError(400, "invalid_query");
+    const toEndIso = toIso ? new Date(+toIso + 86_400_000) : null; // inclusive day
+
+    const { data, error } = await supabaseAdmin.rpc("search_documents", {
+      p_user_id: user.id,
+      p_q: p.q ?? null,
+      p_owner: p.owner ?? null,
+      p_category: p.category ?? null,
+      p_from: fromIso ? fromIso.toISOString() : null,
+      p_to: toEndIso ? toEndIso.toISOString() : null,
+      p_limit: p.pageSize,
+      p_offset: (p.page - 1) * p.pageSize,
+    });
     if (error) throw error;
-    const rows = data ?? [];
 
-    const [emails, grants] = await Promise.all([
-      emailsFor(rows.map((r) => r.owner_id)),
-      rows.length
-        ? supabaseAdmin.from("document_permissions").select("document_id").in("document_id", rows.map((r) => r.id)).is("revoked_at", null)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    if (grants.error) throw grants.error;
-    const counts = new Map<string, number>();
-    for (const g of grants.data ?? []) counts.set(g.document_id, (counts.get(g.document_id) ?? 0) + 1);
-
+    const rows = (data ?? []) as SearchRow[];
     return json({
       page: p.page,
       pageSize: p.pageSize,
-      total: count ?? 0,
+      total: rows.length ? Number(rows[0].total_count) : 0,
       items: rows.map((r) => ({
         id: r.id,
         name: r.name,
         category: r.category,
         mimeType: r.mime_type,
         sizeBytes: r.size_bytes,
-        owner: { id: r.owner_id, email: emails.get(r.owner_id) ?? null },
         createdAt: r.created_at,
         updatedAt: r.updated_at,
-        deletedAt: r.deleted_at,
-        activeGrants: counts.get(r.id) ?? 0,
+        owner: { name: r.owner_name, email: r.owner_email },
+        yourAccess: r.your_access,
       })),
     });
+  } catch (err) {
+    return handleError(err);
+  }
+}
+
+// --------------------------------------------------------------------- upload
+
+async function auditRejectedUpload(user: AppUser, reason: string) {
+  try {
+    await logAudit({ actorId: user.id, action: "upload", outcome: "denied", details: { reason } });
+  } catch (e) {
+    console.error("could not audit rejected upload:", e);
+  }
+}
+
+// POST /api/documents  (multipart/form-data: file, category?)
+// Any signed-in, active user may upload; the uploader becomes the OWNER.
+// owner_id always comes from the session, never from the request.
+export async function POST(req: Request) {
+  try {
+    assertSameOrigin(req);
+    const user = await requireUser();
+    if (!user.uploadEnabled) {
+      await auditRejectedUpload(user, "upload_disabled_by_admin");
+      throw new HttpError(403, "upload_disabled_by_admin");
+    }
+
+    let up;
+    try {
+      up = await readUpload(req);
+    } catch (e) {
+      if (e instanceof HttpError) await auditRejectedUpload(user, e.code);
+      throw e;
+    }
+
+    const docId = randomUUID();
+    const storageKey = randomUUID(); // random: never the user's file name
+
+    // Audit FIRST: if this fails we stop, so no document ever exists without a record.
+    await logAudit({
+      actorId: user.id,
+      action: "upload",
+      documentId: docId,
+      outcome: "allowed",
+      details: { name: up.name, category: up.category, mime: up.mime, size: up.size, sha256: up.sha256 },
+    });
+
+    await putObject(storageKey, up.buffer, up.mime);
+
+    const { error } = await supabaseAdmin.from("documents").insert({
+      id: docId,
+      owner_id: user.id,
+      name: up.name,
+      category: up.category,
+      storage_key: storageKey,
+      mime_type: up.mime,
+      size_bytes: up.size,
+      sha256: up.sha256,
+    });
+    if (error) {
+      await removeObject(storageKey); // no orphaned file
+      throw error;
+    }
+
+    return json({ id: docId, name: up.name, category: up.category, mimeType: up.mime, sizeBytes: up.size }, 201);
   } catch (err) {
     return handleError(err);
   }

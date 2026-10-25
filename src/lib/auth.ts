@@ -12,14 +12,15 @@ export type AppUser = {
   email: string;
   name: string | null;
   role: AppRole;
+  uploadEnabled: boolean;
 };
 
-type UserRow = AppUser & { active: boolean };
+type UserRow = Omit<AppUser, "uploadEnabled"> & { active: boolean; upload_enabled: boolean };
 
 async function findByClerkId(clerkId: string): Promise<UserRow | null> {
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("id, email, name, role, active")
+    .select("id, email, name, role, active, upload_enabled")
     .eq("clerk_id", clerkId)
     .maybeSingle();
   if (error) throw error;
@@ -88,7 +89,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     throw new HttpError(403, "account_disabled");
   }
 
-  return { id: row.id, email: row.email, name: row.name, role: row.role };
+  return { id: row.id, email: row.email, name: row.name, role: row.role, uploadEnabled: row.upload_enabled };
 }
 
 /** Use at the top of every API route that needs a signed-in user. */

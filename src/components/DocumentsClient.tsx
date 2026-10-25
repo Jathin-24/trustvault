@@ -12,6 +12,7 @@ type Item = {
 type ListResp = { page: number; pageSize: number; total: number; items: Item[] };
 
 const MAX_BYTES = 4 * 1024 * 1024;
+type Me = { id: string; email: string; role: "admin" | "member"; uploadEnabled: boolean };
 const EMPTY = { q: "", owner: "", category: "", from: "", to: "" };
 
 export default function DocumentsClient() {
@@ -22,6 +23,7 @@ export default function DocumentsClient() {
   const params = new URLSearchParams({ page: String(page), pageSize: "10" });
   for (const [k, v] of Object.entries(applied)) if (v.trim()) params.set(k, v.trim());
   const { data, error, loading, reload } = useApi<ListResp>(`/api/documents?${params}`);
+  const me = useApi<Me>("/api/me");
 
   // upload
   const fileRef = useRef<HTMLInputElement>(null);
@@ -59,7 +61,7 @@ export default function DocumentsClient() {
 
   return (
     <>
-      <Card title="Upload a document">
+      {me.data?.uploadEnabled ? <Card title="Upload a document">
         {upErr && <Notice>{upErr}</Notice>}
         {upOk && <Notice kind="ok">{upOk}</Notice>}
         <form onSubmit={upload} className="flex flex-wrap items-end gap-3">
@@ -68,7 +70,7 @@ export default function DocumentsClient() {
           <Btn type="submit" disabled={busy}>{busy ? "Uploading…" : "Upload"}</Btn>
         </form>
         <p className="mt-2 text-xs text-slate-500">PDF, PNG, JPG, TXT or DOCX, up to 4 MB. You become the owner of what you upload.</p>
-      </Card>
+      </Card> : <Card title="Upload disabled"><p className="text-sm text-slate-600">Your account is currently set to viewer access. An administrator has disabled document uploads for your account. You can still access documents shared with you.</p></Card>}
 
       <Card title="Your documents">
         <form

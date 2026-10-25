@@ -14,7 +14,7 @@ export async function GET() {
 
   try {
     const user = await requireUser();
-    return json({ id: user.id, email: user.email, role: user.role });
+    return json({ id: user.id, email: user.email, role: user.role, uploadEnabled: user.uploadEnabled });
   } catch (err) {
     return handleError(err);
   }

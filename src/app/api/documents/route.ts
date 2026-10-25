@@ -102,6 +102,10 @@ export async function POST(req: Request) {
   try {
     assertSameOrigin(req);
     const user = await requireUser();
+    if (!user.uploadEnabled) {
+      await auditRejectedUpload(user, "upload_disabled_by_admin");
+      throw new HttpError(403, "upload_disabled_by_admin");
+    }
 
     let up;
     try {

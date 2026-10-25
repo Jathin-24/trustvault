@@ -179,13 +179,13 @@ function DocumentsTab() {
 
 // ------------------------------------------------------------------ users
 
-type UserRow = { id: string; email: string; name: string | null; role: "admin" | "member"; active: boolean; createdAt: string };
+type UserRow = { id: string; email: string; name: string | null; role: "admin" | "member"; active: boolean; uploadEnabled: boolean; createdAt: string };
 
 function UsersTab() {
   const { data, error, loading, reload } = useApi<{ items: UserRow[] }>("/api/admin/users");
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  async function change(u: UserRow, patch: { role?: "admin" | "member"; active?: boolean }, question: string) {
+  async function change(u: UserRow, patch: { role?: "admin" | "member"; active?: boolean; uploadEnabled?: boolean }, question: string) {
     if (!confirm(question)) return;
     setMsg(null);
     try {
@@ -203,19 +203,23 @@ function UsersTab() {
       <Status error={error} loading={loading && !data} empty={!!data && data.items.length === 0} />
       {data && data.items.length > 0 && (
         <table className="w-full text-left text-sm">
-          <thead className={head}><tr><Th>Email</Th><Th>Name</Th><Th>Role</Th><Th>Status</Th><Th>Joined</Th><Th /></tr></thead>
+          <thead className={head}><tr><Th>Email</Th><Th>Name</Th><Th>Role</Th><Th>Upload</Th><Th>Status</Th><Th>Joined</Th><Th /></tr></thead>
           <tbody>
             {data.items.map((u) => (
               <tr key={u.id} className="border-b last:border-0">
                 <td className="py-2 pr-3">{u.email}</td>
                 <td className="pr-3">{u.name ?? "—"}</td>
                 <td className="pr-3"><Badge tone={u.role === "admin" ? "amber" : "slate"}>{u.role}</Badge></td>
+                <td className="pr-3"><Badge tone={u.uploadEnabled ? "green" : "slate"}>{u.uploadEnabled ? "Can upload" : "Viewer only"}</Badge></td>
                 <td className="pr-3">{u.active ? <Badge tone="green">active</Badge> : <Badge tone="red">disabled</Badge>}</td>
                 <td className="pr-3">{formatDate(u.createdAt)}</td>
                 <td className="flex justify-end gap-2 py-1">
                   {u.role === "member"
                     ? <Btn variant="ghost" onClick={() => change(u, { role: "admin" }, `Make ${u.email} an administrator?`)}>Make admin</Btn>
                     : <Btn variant="ghost" onClick={() => change(u, { role: "member" }, `Remove administrator rights from ${u.email}?`)}>Make member</Btn>}
+                  {u.uploadEnabled
+                    ? <Btn variant="ghost" onClick={() => change(u, { uploadEnabled: false }, `Disable uploads for ${u.email}? They will remain able to view documents shared with them.`)}>Make viewer</Btn>
+                    : <Btn variant="ghost" onClick={() => change(u, { uploadEnabled: true }, `Allow ${u.email} to upload documents?`)}>Allow upload</Btn>}
                   {u.active
                     ? <Btn variant="danger" onClick={() => change(u, { active: false }, `Disable ${u.email}? They are locked out on their next request.`)}>Disable</Btn>
                     : <Btn variant="ghost" onClick={() => change(u, { active: true }, `Re-enable ${u.email}?`)}>Enable</Btn>}
@@ -225,7 +229,7 @@ function UsersTab() {
           </tbody>
         </table>
       )}
-      <p className="mt-3 text-xs text-slate-500">You cannot change your own account. New administrators can only be created here or directly in the database.</p>
+      <p className="mt-3 text-xs text-slate-500">You cannot change your own account. Upload access is separate from administrator role. Viewer-only users can still view documents explicitly shared with them.</p>
     </Card>
   );
 }

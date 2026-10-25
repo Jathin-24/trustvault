@@ -13,7 +13,12 @@ export const config = {
 };
 
 
-const isPublic = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+const isPublic = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/privacy-policy(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (req.nextUrl.pathname.startsWith("/api")) {

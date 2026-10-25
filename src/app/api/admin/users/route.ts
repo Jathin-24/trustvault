@@ -11,14 +11,14 @@ export async function GET() {
 
     const { data, error } = await supabaseAdmin
       .from("users")
-      .select("id, email, name, role, active, created_at")
+      .select("id, email, name, role, active, upload_enabled, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
     if (error) throw error;
 
     return json({
       items: (data ?? []).map((u) => ({
-        id: u.id, email: u.email, name: u.name, role: u.role, active: u.active, createdAt: u.created_at,
+        id: u.id, email: u.email, name: u.name, role: u.role, active: u.active, uploadEnabled: u.upload_enabled, createdAt: u.created_at,
       })),
     });
   } catch (err) {
